@@ -274,6 +274,49 @@ When given a case study, do not start coding. Use this four-step diagnostic appr
 3.  **Solve (The Delta):** Identify what the product *doesn't* do out of the box and how you will build the "glue".
 4.  **Evaluate:** How do we prove the AI isn't hallucinating? How do we monitor performance?
 
+
+```mermaid 
+flowchart TD
+
+Q[Question] --> C --> A --> S --> E
+
+subgraph Clarify
+direction TB
+C[Clarify]
+C1[Definition of Done]
+C2[Functional Requirements]
+C3[Non-Functional Requirements]
+C4[Constraints]
+end
+
+subgraph Architect
+direction TB
+A[Architect]
+A1[User Interface]
+A2[Data Flow]
+A3[Storage]
+A4[Cloud / On-Prem Integration]
+end
+
+subgraph Solve
+direction TB
+S[Solve]
+S1[Production Reality Gap]
+S2[Model Selection]
+S3[Response Processing]
+S4[Governance & Compliance]
+end
+
+subgraph Evaluate
+direction TB
+E[Evaluate]
+E1[Performance Monitoring]
+E2[Cost Management]
+E3[Scalability]
+E4[Security & Hallucination Control]
+end
+``` 
+
 ---
 
 ### 🏥 The "Delta" Case Study: Hospital Readmission
