@@ -480,6 +480,7 @@ graph LR
 - Transition 1st-line support to the internal Client Ops team.
 ```
 
+- Check out more Architecture Template (GCP): [Enterprise RAG Architecture Template](rag-template.md)
 ---
 
 ## 📖 Comprehensive Reading List
