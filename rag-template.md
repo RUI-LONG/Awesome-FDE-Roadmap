@@ -16,17 +16,20 @@ graph TB
 
 subgraph "Index Pipeline"
 
-    Src[(OnPrem DB)]
+    Src[(On-Prem DB)]
 
     Src -.->|Interconnect | GCS[Cloud Storage<br/>Image & Thumbnail]
 
-    GCS --> BatchEmbed[Vertex AI Batch Prediction]
+    GCS --> IngestJob[Cloud Run / Dataflow]
 
-    BatchEmbed --> IngestJob[Cloud Run / Dataflow]
-    IngestJob --> VecStore[(Vertex AI Vector Search)]
+    IngestJob --> BatchEmbed[Vertex AI Batch Embeddings]
+
+    BatchEmbed --> VecStore[(Vertex AI Vector Search)]
 
 
-    Src --> MetaStore[(Firestore <br/> Product Metadata)]
+    Src --> MetaStore[(Firestore Batch Write<br/> Product Metadata)]
+
+    MetaStore --> IngestJob
 
 end
 
@@ -34,33 +37,35 @@ end
 subgraph "Query Pipeline"
 
     User((Web / App))
+    
+    User <--> CDN[Cloud CDN]
 
     User --> GLB[Cloud Load Balancing]
 
-    GLB --> API[Cloud Run + Vision AI API]
-
+    GLB --> API[Cloud Run]
+    
     API --> Cache[(Memorystore Redis <br/>
     Query + Result Cache)]
 
-    Cache -->|Cache Hit| API
+    Cache -->|Cache Hit| User
 
-    Cache -->|Cache Miss| EmbedOnline[Vertex AI Online Prediction]
+    Cache -->|Cache Miss| Safety[Vertex AI Safety]
+    Safety -->Embeddings[Vertex AI Multimodal Embedding]
 
-    EmbedOnline --> ANN[(Vertex AI Vector Search)]
+    Embeddings --> ANN[(Vertex AI Vector Search with metadata filter)]
 
-    ANN --> Filter[(Firestore Metadata Filter)]
+    ANN --> Filter[(Firestore Batch Get)]
 
-    Filter --> Guardrail[Vertex AI Guardrail & Content Filter]
+    Filter --> LLM[Vertex AI LLM Generation + Vertex AI Grounding]
 
-    Guardrail --> Verify[Vertex AI LLM Generation + Vertex AI Grounding]
+    LLM --> Verify[Vertex AI Content Filter]
 
     Verify --> API
-
-    API --> Thumb[Cloud Storage <br/> Image & Thumbnail]
 
     API --> User
 
 end
+
 
 
 %% =========================
@@ -88,13 +93,14 @@ graph TB
 subgraph "Index Pipeline"
 direction TB
 
-    Src[(OnPrem DB / SharePoint / Drive)]
+    Src[(On-Prem DB)]
     Src -.->|Interconnect / VPN| GCS[Cloud Storage<br/>Raw Documents]
     GCS --> DocAI[Document AI<br/>OCR + Layout Parsing]
     DocAI --> Chunk[Dataflow<br/>Chunking + Tagging]
-    Chunk --> BatchEmbed[Vertex AI Batch Embedding]
-    BatchEmbed --> VecStore[(Vertex AI Vector Search)]
-    Chunk --> KeywordIndex[Vertex AI Search<br/>Keyword Index]
+    Chunk --> TextEmbed[Vertex AI Batch Text Embeddings]
+    Chunk --> MultimodalEmbed[Vertex AI Multimodal Embeddings]
+    TextEmbed --> VecStore[(Vertex AI Vector Search)]
+    MultimodalEmbed --> VecStore[(Vertex AI Vector Search)]
     Chunk --> MetaStore[(Firestore<br/>File Metadata)]
 
 end
@@ -108,12 +114,11 @@ direction TB
     User((Web / Copilot UI))
     User --> Agent[Google ADK Agent Engine]
     Agent --> Hybrid[Cloud Run<br/>Hybrid Retrieval Service]
-    Hybrid --> OnlineEmbed[Vertex AI Online Embedding]
-    OnlineEmbed --> ANN[(Vertex AI Vector Search)]
-    Hybrid --> Keyword[Vertex AI Search]
-    ANN --> Combine[Combine Results<br/>]
-    Keyword --> Combine
-    Combine --> MetaFilter[(Firestore<br/>Metadata Filter)]
+    Hybrid --> MultimodalEmbedd[Vertex AI Multimodal Embedding]
+    Hybrid --> TextEmbedd[Vertex AI Text Embeddings]
+    MultimodalEmbedd --> ANN[(Vertex AI Vector Search <br\>hybrid search)]
+    TextEmbedd --> ANN
+    ANN --> MetaFilter[(Firestore<br/>Metadata Filter)]
     MetaFilter --> Rerank[Cross-Encoder Rerank<br/>Vertex AI Endpoint]
     Rerank --> LLM[Vertex AI LLM <br/>Generation + Grounding]
     LLM --> ContentFilter[Vertex AI Content Filter]
@@ -142,44 +147,53 @@ Use Cases: Offline Report Generation, Document Processing Automation
 graph TB
 
 %% =========================
-%% ========== INDEX PIPELINE ==========
+%% ========== Budget Control ==========
+%% =========================
+subgraph "Budget Control"
+direction TB
+    Sched[Cloud Scheduler]
+    Orchestrator[Workflows<br/>Create run_id + Control Concurrency]
+    Budget[Billing Budget Alert]
+end
+
+Budget -.->|Pause Trigger| Sched
+Sched --> Orchestrator
+
+%% =========================
+%% ========== PROCESSING ==========
 %% =========================
 subgraph "Processing Pipeline"
 direction TB
 
-    Src[(OnPrem DB / SaaS / Files)]
-    Src -.->|Interconnect / VPN| GCS[Cloud Storage<br/>Raw Data]
+    Src[(On-Prem DB)]
+    Src -.->|VPN / Interconnect| GCSRaw[Cloud Storage<br/>Raw Data]
 
-    GCS --> Ingest[Dataflow<br/>Batch ETL + Validation]
+    GCSRaw --> Ingest[Dataflow Batch<br/>Batch ETL + Validation]
 
-    Ingest --> BatchLLM[Vertex AI Batch Prediction<br/>Summarization / Classification]
+    Ingest --> Prep[Chunk + Cleanup<br/>]
 
-    BatchLLM --> Report[(BigQuery<br/>Report Tables)]
+    Prep --> BatchLLM[Vertex AI Batch Prediction<br/>]
+
+    BatchLLM --> Report[(BigQuery<br/>Partitioned + MERGE by run_id)]
     BatchLLM --> Artifact[Cloud Storage<br/>Generated Files]
 
 end
 
-%% =========================
-%% ========== REPORT ACCESS PIPELINE ==========
-%% =========================
-subgraph "Access Layer"
-direction TB
+Orchestrator --> Ingest
+Orchestrator --> BatchLLM
 
-    User((Internal Tool))
-    User --> Report
-
-end
+%% =========================
+%% ========== ACCESS ==========
+%% =========================
+User((Internal Tool)) --> Report
 
 %% =========================
 %% ========== OBSERVABILITY ==========
 %% =========================
-Ingest -.-> Mon[Cloud Monitoring]
-Ingest -.-> Log[Cloud Logging]
-
+Ingest -.-> Mon[Monitoring]
 BatchLLM -.-> Mon
-BatchLLM -.-> Log
-```
 
+```
 ## 4. Compliance-First Pattern
 
 Use Cases: Healthcare AI Document Assistant
